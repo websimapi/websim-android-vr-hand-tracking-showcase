@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Android VR Hand Tracking Showcase</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="loading">
+        <div class="loader">
+            <div class="hand-loader"></div>
+            <p>Initializing Hand Tracking...</p>
+        </div>
+    </div>
+
+    <div id="ui-overlay">
+        <div class="header">
+            <h1>Android VR Hand Tracking</h1>
+            <p class="subtitle">Experience next-generation hand tracking in VR</p>
+        </div>
+        
+        <div class="controls-panel">
+            <div class="control-group">
+                <label>Tracking Sensitivity</label>
+                <input type="range" id="sensitivity" min="0.1" max="2" step="0.1" value="1">
+            </div>
+            <div class="control-group">
+                <label>Gesture Recognition</label>
+                <button id="gesture-toggle" class="btn">Enable Gestures</button>
+            </div>
+            <div class="control-group">
+                <label>Haptic Feedback</label>
+                <button id="haptics-toggle" class="btn active">Enable Haptics</button>
+            </div>
+        </div>
+
+        <div class="gesture-indicator">
+            <div id="gesture-display">
+                <span class="gesture-icon">👋</span>
+                <span class="gesture-name">Wave Detected</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="vr-container">
+        <canvas id="hand-tracking-canvas"></canvas>
+    </div>
+
+    <div class="performance-stats">
+        <div class="stat">
+            <span class="label">FPS</span>
+            <span id="fps">60</span>
+        </div>
+        <div class="stat">
+            <span class="label">Latency</span>
+            <span id="latency">12ms</span>
+        </div>
+        <div class="stat">
+            <span class="label">Hands Tracked</span>
+            <span id="hands-tracked">2</span>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+    
+    <script type="module" src="main.js"></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"4c6229722a6346bc8eb5cb0e5eae5d41","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+</html>
+
