@@ -135,15 +135,47 @@ class HandTrackingVR {
         const hand1 = this.renderer.xr.getHand(0);
         const hand2 = this.renderer.xr.getHand(1);
         
-        // Add hand models
-        const handModelFactory = new XRControllerModelFactory();
-        hand1.add(handModelFactory.createHandModel(hand1, 'hands'));
-        hand2.add(handModelFactory.createHandModel(hand2, 'hands'));
+        // Create visual representation for VR hands using simple geometry
+        for (let i = 0; i < 2; i++) {
+            const hand = i === 0 ? hand1 : hand2;
+            const color = new THREE.Color().setHSL(i * 0.5, 0.8, 0.6);
+            
+            // Create joints for hand tracking
+            const jointGeometry = new THREE.SphereGeometry(0.015, 12, 12);
+            const jointMaterial = new THREE.MeshPhongMaterial({
+                color: color,
+                emissive: color,
+                emissiveIntensity: 0.3,
+                transparent: true,
+                opacity: 0.8
+            });
+
+            const joints = [];
+            for (let j = 0; j < 21; j++) {
+                const joint = new THREE.Mesh(jointGeometry, jointMaterial);
+                joints.push(joint);
+                hand.add(joint);
+            }
+
+            // Create connecting lines for bones
+            const lineMaterial = new THREE.LineBasicMaterial({
+                color: color,
+                transparent: true,
+                opacity: 0.6
+            });
+
+            const lineGeometry = new THREE.BufferGeometry();
+            const linePositions = new Float32Array(20 * 2 * 3); // 20 connections * 2 points * 3 coordinates
+            lineGeometry.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
+            
+            const handLines = new THREE.LineSegments(lineGeometry, lineMaterial);
+            hand.add(handLines);
+        }
         
         this.scene.add(hand1);
         this.scene.add(hand2);
         
-        // Store hand references
+        // Store hand references for animation updates
         this.vrHands = [hand1, hand2];
     }
 
