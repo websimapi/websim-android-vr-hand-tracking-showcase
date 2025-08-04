@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
-import { Hand } from 'three/addons/webxr/Hand.js';
 
 class HandTrackingVR {
     constructor() {
@@ -13,14 +12,13 @@ class HandTrackingVR {
             alpha: true
         });
         
-        this.hands = [];
-        this.handMeshes = [];
-        this.gestures = new Map();
+        this.cameraHands = [];
+        this.vrHands = [];
+        this.gestureRecognition = true;
+        this.hapticsEnabled = true;
         this.isTracking = false;
-        this.videoElement = null;
-        this.canvasElement = null;
-        this.ctx = null;
         
+        // Initialize immediately
         this.init();
     }
 
@@ -28,7 +26,8 @@ class HandTrackingVR {
         this.setupRenderer();
         this.setupScene();
         this.setupLighting();
-        await this.setupCameraHandTracking();
+        this.setupVRHands(); // Always setup VR hands first
+        this.setupCameraHandTracking(); // Then setup camera tracking as optional
         this.setupEventListeners();
         this.animate();
         
@@ -58,7 +57,7 @@ class HandTrackingVR {
         const starsMaterial = new THREE.PointsMaterial({ color: 0x667eea, size: 0.5 });
         
         const starsVertices = [];
-        for (let i = 0; i < 10000; i++) {
+        for (let i = 0; i < 5000; i++) {
             const x = (Math.random() - 0.5) * 2000;
             const y = (Math.random() - 0.5) * 2000;
             const z = (Math.random() - 0.5) * 2000;
@@ -80,7 +79,7 @@ class HandTrackingVR {
         });
 
         const particlesVertices = [];
-        for (let i = 0; i < 1000; i++) {
+        for (let i = 0; i < 500; i++) {
             particlesVertices.push(
                 (Math.random() - 0.5) * 20,
                 (Math.random() - 0.5) * 20,
@@ -91,6 +90,19 @@ class HandTrackingVR {
         particlesGeometry.setAttribute('position', new THREE.Float32BufferAttribute(particlesVertices, 3));
         const particles = new THREE.Points(particlesGeometry, particlesMaterial);
         this.scene.add(particles);
+
+        // Add a ground plane
+        const planeGeometry = new THREE.PlaneGeometry(50, 50);
+        const planeMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0x1a1a1a,
+            transparent: true,
+            opacity: 0.3
+        });
+        const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+        plane.rotation.x = -Math.PI / 2;
+        plane.position.y = -1;
+        plane.receiveShadow = true;
+        this.scene.add(plane);
 
         this.camera.position.set(0, 1.6, 3);
     }
@@ -118,64 +130,8 @@ class HandTrackingVR {
         this.scene.add(spotLight2);
     }
 
-    async setupCameraHandTracking() {
-        // Load MediaPipe Hands
-        const { Hands } = await import('https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js');
-        
-        // Create video element for camera input
-        this.videoElement = document.createElement('video');
-        this.videoElement.style.display = 'none';
-        document.body.appendChild(this.videoElement);
-
-        // Create canvas for hand detection
-        this.canvasElement = document.createElement('canvas');
-        this.canvasElement.style.display = 'none';
-        document.body.appendChild(this.canvasElement);
-        this.ctx = this.canvasElement.getContext('2d');
-
-        // Initialize MediaPipe Hands
-        this.hands = new Hands({
-            locateFile: (file) => {
-                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`;
-            }
-        });
-
-        this.hands.setOptions({
-            maxNumHands: 2,
-            modelComplexity: 1,
-            minDetectionConfidence: 0.7,
-            minTrackingConfidence: 0.5
-        });
-
-        this.hands.onResults((results) => {
-            this.onHandResults(results);
-        });
-
-        // Setup camera
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'user' }
-            });
-            this.videoElement.srcObject = stream;
-            this.videoElement.play();
-
-            // Send to MediaPipe
-            await this.hands.send({ image: this.videoElement });
-        } catch (error) {
-            console.error('Error accessing camera:', error);
-            this.setupVRHands(); // Fallback to VR hands
-        }
-
-        // Create custom hand meshes for camera tracking
-        this.createCustomHandMeshes();
-    }
-
     setupVRHands() {
         // Create hand tracking controllers for VR mode
-        const controller1 = this.renderer.xr.getController(0);
-        const controller2 = this.renderer.xr.getController(1);
-        
-        // Create hand models
         const hand1 = this.renderer.xr.getHand(0);
         const hand2 = this.renderer.xr.getHand(1);
         
@@ -191,14 +147,68 @@ class HandTrackingVR {
         this.vrHands = [hand1, hand2];
     }
 
-    createCustomHandMeshes() {
-        this.handMeshes = [];
+    async setupCameraHandTracking() {
+        try {
+            // Load MediaPipe Hands
+            const { Hands } = await import('https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js');
+            
+            // Create video element for camera input
+            this.videoElement = document.createElement('video');
+            this.videoElement.style.display = 'none';
+            document.body.appendChild(this.videoElement);
+
+            // Create canvas for hand detection
+            this.canvasElement = document.createElement('canvas');
+            this.canvasElement.style.display = 'none';
+            document.body.appendChild(this.canvasElement);
+            this.ctx = this.canvasElement.getContext('2d');
+
+            // Initialize MediaPipe Hands
+            this.cameraHands = new Hands({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`;
+                }
+            });
+
+            this.cameraHands.setOptions({
+                maxNumHands: 2,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.7,
+                minTrackingConfidence: 0.5
+            });
+
+            this.cameraHands.onResults((results) => {
+                this.onCameraHandResults(results);
+            });
+
+            // Setup camera
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'user' }
+            });
+            this.videoElement.srcObject = stream;
+            this.videoElement.play();
+
+            // Create camera hand meshes
+            this.createCameraHandMeshes();
+
+            // Start processing
+            await this.cameraHands.send({ image: this.videoElement });
+            
+            console.log('Camera hand tracking initialized');
+        } catch (error) {
+            console.warn('Camera hand tracking not available:', error);
+            // VR hands will still work
+        }
+    }
+
+    createCameraHandMeshes() {
+        this.cameraHandMeshes = [];
         
         for (let i = 0; i < 2; i++) {
-            const handMesh = new THREE.Group();
+            const handGroup = new THREE.Group();
             
             // Create glowing hand skeleton
-            const jointGeometry = new THREE.SphereGeometry(0.01, 16, 16);
+            const jointGeometry = new THREE.SphereGeometry(0.02, 16, 16);
             const jointMaterial = new THREE.MeshPhongMaterial({
                 color: new THREE.Color().setHSL(i * 0.5, 0.8, 0.6),
                 emissive: new THREE.Color().setHSL(i * 0.5, 0.8, 0.3),
@@ -210,12 +220,11 @@ class HandTrackingVR {
             const joints = [];
             for (let j = 0; j < 21; j++) {
                 const joint = new THREE.Mesh(jointGeometry, jointMaterial);
-                joint.userData = { jointIndex: j };
                 joints.push(joint);
-                handMesh.add(joint);
+                handGroup.add(joint);
             }
 
-            // Create connecting lines between joints
+            // Create connecting lines
             const lineMaterial = new THREE.LineBasicMaterial({
                 color: new THREE.Color().setHSL(i * 0.5, 0.8, 0.8),
                 transparent: true,
@@ -227,29 +236,35 @@ class HandTrackingVR {
             lineGeometry.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
             
             const handLines = new THREE.LineSegments(lineGeometry, lineMaterial);
-            handMesh.add(handLines);
+            handGroup.add(handLines);
 
-            this.handMeshes.push({ group: handMesh, joints, lines: handLines });
-            this.scene.add(handMesh);
+            this.cameraHandMeshes.push({ group: handGroup, joints, lines: handLines });
+            this.scene.add(handGroup);
         }
     }
 
-    onHandResults(results) {
-        if (!results.multiHandLandmarks) return;
+    onCameraHandResults(results) {
+        if (!results.multiHandLandmarks || !this.cameraHandMeshes) return;
 
-        // Update hand meshes based on camera tracking
+        // Hide all camera hand meshes initially
+        this.cameraHandMeshes.forEach(handMesh => {
+            handMesh.group.visible = false;
+        });
+
+        // Show and update detected hands
         results.multiHandLandmarks.forEach((landmarks, handIndex) => {
-            if (handIndex >= this.handMeshes.length) return;
+            if (handIndex >= this.cameraHandMeshes.length) return;
 
-            const handMesh = this.handMeshes[handIndex];
+            const handMesh = this.cameraHandMeshes[handIndex];
+            handMesh.group.visible = true;
             
             // Convert MediaPipe landmarks to 3D positions
             landmarks.forEach((landmark, i) => {
                 if (i < handMesh.joints.length) {
                     // Scale and position for 3D space
-                    const x = (landmark.x - 0.5) * 2;
-                    const y = -(landmark.y - 0.5) * 2;
-                    const z = -landmark.z * 2;
+                    const x = (landmark.x - 0.5) * 4;
+                    const y = -(landmark.y - 0.5) * 4;
+                    const z = -landmark.z * 2 - 2;
                     
                     handMesh.joints[i].position.set(x, y, z);
                 }
@@ -259,24 +274,21 @@ class HandTrackingVR {
             const positions = handMesh.lines.geometry.attributes.position.array;
             let vertexIndex = 0;
 
-            // Define hand connections (MediaPipe format)
             const connections = [
-                [0, 1], [1, 2], [2, 3], [3, 4], // Thumb
-                [0, 5], [5, 6], [6, 7], [7, 8], // Index
-                [5, 9], [9, 10], [10, 11], [11, 12], // Middle
-                [9, 13], [13, 14], [14, 15], [15, 16], // Ring
-                [13, 17], [17, 18], [18, 19], [19, 20] // Pinky
+                [0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8],
+                [5, 9], [9, 10], [10, 11], [11, 12], [9, 13], [13, 14], [14, 15],
+                [15, 16], [13, 17], [17, 18], [18, 19], [19, 20], [0, 17]
             ];
 
             connections.forEach(([start, end]) => {
                 if (landmarks[start] && landmarks[end]) {
-                    const x1 = (landmarks[start].x - 0.5) * 2;
-                    const y1 = -(landmarks[start].y - 0.5) * 2;
-                    const z1 = -landmarks[start].z * 2;
+                    const x1 = (landmarks[start].x - 0.5) * 4;
+                    const y1 = -(landmarks[start].y - 0.5) * 4;
+                    const z1 = -landmarks[start].z * 2 - 2;
                     
-                    const x2 = (landmarks[end].x - 0.5) * 2;
-                    const y2 = -(landmarks[end].y - 0.5) * 2;
-                    const z2 = -landmarks[end].z * 2;
+                    const x2 = (landmarks[end].x - 0.5) * 4;
+                    const y2 = -(landmarks[end].y - 0.5) * 4;
+                    const z2 = -landmarks[end].z * 2 - 2;
                     
                     positions[vertexIndex++] = x1;
                     positions[vertexIndex++] = y1;
@@ -298,38 +310,41 @@ class HandTrackingVR {
         });
 
         // Continue processing
-        if (this.videoElement) {
-            this.hands.send({ image: this.videoElement });
+        if (this.videoElement && this.cameraHands) {
+            this.cameraHands.send({ image: this.videoElement });
         }
     }
 
     detectCameraGestures(landmarks) {
         if (!landmarks) return null;
         
-        // Simple gesture detection based on finger positions
+        // Simple gesture detection
         const thumbTip = landmarks[4];
         const indexTip = landmarks[8];
         const middleTip = landmarks[12];
         const ringTip = landmarks[16];
         const pinkyTip = landmarks[20];
         
-        // Detect wave (simple vertical movement)
-        if (Math.abs(indexTip.y - middleTip.y) < 0.1) {
-            return 'wave';
-        }
-        
-        // Detect fist
+        // Detect open palm
         const distances = [indexTip, middleTip, ringTip, pinkyTip].map(tip => 
             Math.sqrt((tip.x - landmarks[0].x) ** 2 + (tip.y - landmarks[0].y) ** 2)
         );
         
-        if (Math.max(...distances) < 0.3) {
+        if (Math.min(...distances) > 0.4) {
+            return 'open';
+        }
+        
+        // Detect fist
+        if (Math.max(...distances) < 0.2) {
             return 'fist';
         }
         
-        // Detect open palm
-        if (Math.min(...distances) > 0.5) {
-            return 'open';
+        // Detect peace sign
+        const indexDistance = Math.sqrt((indexTip.x - landmarks[0].x) ** 2 + (indexTip.y - landmarks[0].y) ** 2);
+        const middleDistance = Math.sqrt((middleTip.x - landmarks[0].x) ** 2 + (middleTip.y - landmarks[0].y) ** 2);
+        
+        if (indexDistance > 0.3 && middleDistance > 0.3) {
+            return 'peace';
         }
         
         return null;
@@ -365,9 +380,8 @@ class HandTrackingVR {
     }
 
     updateSensitivity(value) {
-        // Update hand tracking sensitivity
-        if (this.hands && this.hands.setOptions) {
-            this.hands.setOptions({ minDetectionConfidence: value * 0.7 });
+        if (this.cameraHands && this.cameraHands.setOptions) {
+            this.cameraHands.setOptions({ minDetectionConfidence: value * 0.7 });
         }
     }
 
@@ -376,98 +390,11 @@ class HandTrackingVR {
         button.classList.toggle('active');
         button.textContent = button.classList.contains('active') ? 'Disable Gestures' : 'Enable Gestures';
         
-        // Toggle gesture recognition
         this.gestureRecognition = !this.gestureRecognition;
     }
 
     toggleHaptics() {
-        // Toggle haptic feedback
         this.hapticsEnabled = !this.hapticsEnabled;
-    }
-
-    detectGestures(hand) {
-        if (!this.gestureRecognition) return null;
-        
-        // Simple gesture detection based on finger positions
-        const joints = hand.joints;
-        if (!joints) return null;
-        
-        // Detect wave gesture
-        const palm = joints[0];
-        if (palm && Math.abs(palm.position.y) > 0.5) {
-            return 'wave';
-        }
-        
-        // Detect fist gesture
-        const fingers = [4, 8, 12, 16, 20];
-        const isFist = fingers.every(index => {
-            const joint = joints[index];
-            return joint && joint.position.distanceTo(joints[0].position) < 0.1;
-        });
-        
-        if (isFist) return 'fist';
-        
-        // Detect open palm
-        const isOpen = fingers.every(index => {
-            const joint = joints[index];
-            return joint && joint.position.distanceTo(joints[0].position) > 0.15;
-        });
-        
-        if (isOpen) return 'open';
-        
-        return null;
-    }
-
-    updateHandMeshes() {
-        this.hands.forEach((hand, index) => {
-            if (!hand.hand) return;
-            
-            const joints = hand.hand.values;
-            const handMesh = this.handMeshes[index];
-            
-            if (!joints || !handMesh) return;
-            
-            // Update joint positions
-            joints.forEach((joint, i) => {
-                if (i < handMesh.joints.length && joint) {
-                    handMesh.joints[i].position.copy(joint.position);
-                    handMesh.joints[i].quaternion.copy(joint.quaternion);
-                }
-            });
-            
-            // Update connecting lines
-            const positions = handMesh.lines.geometry.attributes.position.array;
-            let vertexIndex = 0;
-            
-            // Define hand connections
-            const connections = [
-                [0, 1], [1, 2], [2, 3], [3, 4],
-                [0, 5], [5, 6], [6, 7], [7, 8],
-                [0, 9], [9, 10], [10, 11], [11, 12],
-                [0, 13], [13, 14], [14, 15], [15, 16],
-                [0, 17], [17, 18], [18, 19], [19, 20]
-            ];
-            
-            connections.forEach(([start, end]) => {
-                if (joints[start] && joints[end]) {
-                    positions[vertexIndex++] = joints[start].position.x;
-                    positions[vertexIndex++] = joints[start].position.y;
-                    positions[vertexIndex++] = joints[start].position.z;
-                    
-                    positions[vertexIndex++] = joints[end].position.x;
-                    positions[vertexIndex++] = joints[end].position.y;
-                    positions[vertexIndex++] = joints[end].position.z;
-                }
-            });
-            
-            handMesh.lines.geometry.attributes.position.needsUpdate = true;
-            
-            // Detect gestures
-            const gesture = this.detectGestures(hand.hand);
-            if (gesture) {
-                this.showGesture(gesture);
-            }
-        });
     }
 
     showGesture(gesture) {
@@ -478,7 +405,8 @@ class HandTrackingVR {
         const gestures = {
             wave: { icon: '👋', name: 'Wave Detected' },
             fist: { icon: '✊', name: 'Fist Detected' },
-            open: { icon: '✋', name: 'Open Palm Detected' }
+            open: { icon: '✋', name: 'Open Palm Detected' },
+            peace: { icon: '✌️', name: 'Peace Sign Detected' }
         };
         
         if (gestures[gesture]) {
@@ -512,9 +440,8 @@ class HandTrackingVR {
         document.getElementById('latency').textContent = `${latency}ms`;
         
         // Update hands tracked
-        const trackedHands = this.handMeshes.filter(mesh => 
-            mesh.joints.some(joint => joint.position.length() > 0)
-        ).length;
+        const trackedHands = (this.cameraHandMeshes || []).filter(mesh => mesh.group.visible).length 
+                          + (this.vrHands || []).length;
         document.getElementById('hands-tracked').textContent = trackedHands;
     }
 
@@ -523,7 +450,7 @@ class HandTrackingVR {
             this.updatePerformanceStats();
             
             // Subtle scene rotation
-            this.scene.rotation.y += 0.001;
+            this.scene.rotation.y += 0.0005;
             
             this.renderer.render(this.scene, this.camera);
         });
