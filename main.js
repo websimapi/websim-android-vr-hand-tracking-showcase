@@ -28,10 +28,8 @@ class HandTrackingVR {
         this.setupLighting();
         this.setupVRHands();
         
-        // Delay camera setup slightly to ensure scene is ready
-        setTimeout(() => {
-            this.setupCameraHandTracking();
-        }, 1000);
+        // Show permission prompt instead of auto-init
+        document.getElementById('permission-prompt').style.display = 'block';
         
         this.setupEventListeners();
         this.animate();
@@ -39,10 +37,7 @@ class HandTrackingVR {
         // Hide loading screen
         setTimeout(() => {
             document.getElementById('loading').style.opacity = '0';
-            setTimeout(() => {
-                document.getElementById('loading').style.display = 'none';
-            }, 500);
-        }, 2000);
+        }, 1500);
     }
 
     setupRenderer() {
@@ -186,6 +181,9 @@ class HandTrackingVR {
 
     async setupCameraHandTracking() {
         try {
+            // Hide permission prompt
+            document.getElementById('permission-prompt').style.display = 'none';
+            
             // Request camera permission explicitly
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: 'user', width: 640, height: 480 }
@@ -209,7 +207,7 @@ class HandTrackingVR {
             this.canvasElement.width = 640;
             this.canvasElement.height = 480;
 
-            // Load MediaPipe Hands
+            // Load MediaPipe Hands dynamically
             const { Hands } = await import('https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js');
             
             // Initialize MediaPipe Hands
@@ -230,31 +228,32 @@ class HandTrackingVR {
                 this.onCameraHandResults(results);
             });
 
-            // Create camera hand meshes
-            this.createCameraHandMeshes();
+            // Create camera hand meshes if not already created
+            if (!this.cameraHandMeshes) {
+                this.createCameraHandMeshes();
+            }
 
-            // Start continuous processing
+            // Start processing
             const processFrame = async () => {
-                if (this.videoElement && this.cameraHands) {
+                if (this.videoElement && this.cameraHands && !this.videoElement.paused) {
                     await this.cameraHands.send({ image: this.videoElement });
                 }
-                requestAnimationFrame(processFrame);
+                if (this.isTrackingCamera) {
+                    requestAnimationFrame(processFrame);
+                }
             };
             
+            this.isTrackingCamera = true;
             processFrame();
+            
+            // Hide loading screen fully
+            document.getElementById('loading').style.display = 'none';
             
             console.log('Camera hand tracking initialized successfully');
         } catch (error) {
             console.error('Camera hand tracking failed:', error);
-            // Show user-friendly message
-            const loading = document.getElementById('loading');
-            loading.innerHTML = `
-                <div class="loader">
-                    <div class="hand-loader"></div>
-                    <p>Camera access required for hand tracking</p>
-                    <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #667eea; border: none; border-radius: 8px; color: white; cursor: pointer;">Grant Camera Access</button>
-                </div>
-            `;
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('permission-prompt').style.display = 'block';
         }
     }
 
@@ -303,9 +302,14 @@ class HandTrackingVR {
     onCameraHandResults(results) {
         if (!results.multiHandLandmarks || !this.cameraHandMeshes) return;
 
-        // Hide all camera hand meshes initially
+        // Show camera hand meshes and hide VR hands when camera tracking
         this.cameraHandMeshes.forEach(handMesh => {
-            handMesh.group.visible = false;
+            handMesh.group.visible = true;
+        });
+        
+        // Hide VR hands when camera tracking is active
+        this.vrHands.forEach(hand => {
+            hand.visible = false;
         });
 
         // Show and update detected hands
@@ -318,10 +322,10 @@ class HandTrackingVR {
             // Convert MediaPipe landmarks to 3D positions
             landmarks.forEach((landmark, i) => {
                 if (i < handMesh.joints.length) {
-                    // Scale and position for 3D space
-                    const x = (landmark.x - 0.5) * 4;
-                    const y = -(landmark.y - 0.5) * 4;
-                    const z = -landmark.z * 2 - 2;
+                    // Scale and position for 3D space in front of camera
+                    const x = (landmark.x - 0.5) * 3;
+                    const y = -(landmark.y - 0.5) * 3 + 0.5;
+                    const z = -landmark.z * 2 - 1;
                     
                     handMesh.joints[i].position.set(x, y, z);
                 }
@@ -339,13 +343,13 @@ class HandTrackingVR {
 
             connections.forEach(([start, end]) => {
                 if (landmarks[start] && landmarks[end]) {
-                    const x1 = (landmarks[start].x - 0.5) * 4;
-                    const y1 = -(landmarks[start].y - 0.5) * 4;
-                    const z1 = -landmarks[start].z * 2 - 2;
+                    const x1 = (landmarks[start].x - 0.5) * 3;
+                    const y1 = -(landmarks[start].y - 0.5) * 3 + 0.5;
+                    const z1 = -landmarks[start].z * 2 - 1;
                     
-                    const x2 = (landmarks[end].x - 0.5) * 4;
-                    const y2 = -(landmarks[end].y - 0.5) * 4;
-                    const z2 = -landmarks[end].z * 2 - 2;
+                    const x2 = (landmarks[end].x - 0.5) * 3;
+                    const y2 = -(landmarks[end].y - 0.5) * 3 + 0.5;
+                    const z2 = -landmarks[end].z * 2 - 1;
                     
                     positions[vertexIndex++] = x1;
                     positions[vertexIndex++] = y1;
@@ -366,9 +370,11 @@ class HandTrackingVR {
             }
         });
 
-        // Continue processing
-        if (this.videoElement && this.cameraHands) {
-            this.cameraHands.send({ image: this.videoElement });
+        // Ensure at least one hand is always visible for demo
+        if (!results.multiHandLandmarks.length && this.cameraHandMeshes) {
+            this.cameraHandMeshes.forEach(handMesh => {
+                handMesh.group.visible = false;
+            });
         }
     }
 
@@ -460,10 +466,10 @@ class HandTrackingVR {
         const name = indicator.querySelector('.gesture-name');
         
         const gestures = {
-            wave: { icon: '👋', name: 'Wave Detected' },
-            fist: { icon: '✊', name: 'Fist Detected' },
             open: { icon: '✋', name: 'Open Palm Detected' },
-            peace: { icon: '✌️', name: 'Peace Sign Detected' }
+            fist: { icon: '✊', name: 'Fist Detected' },
+            peace: { icon: '✌️', name: 'Peace Sign Detected' },
+            wave: { icon: '👋', name: 'Wave Detected' }
         };
         
         if (gestures[gesture]) {
@@ -497,8 +503,7 @@ class HandTrackingVR {
         document.getElementById('latency').textContent = `${latency}ms`;
         
         // Update hands tracked
-        const trackedHands = (this.cameraHandMeshes || []).filter(mesh => mesh.group.visible).length 
-                          + (this.vrHands || []).length;
+        const trackedHands = (this.cameraHandMeshes || []).filter(mesh => mesh.group.visible).length;
         document.getElementById('hands-tracked').textContent = trackedHands;
     }
 
