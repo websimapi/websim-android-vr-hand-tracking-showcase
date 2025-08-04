@@ -26,8 +26,13 @@ class HandTrackingVR {
         this.setupRenderer();
         this.setupScene();
         this.setupLighting();
-        this.setupVRHands(); // Always setup VR hands first
-        this.setupCameraHandTracking(); // Then setup camera tracking as optional
+        this.setupVRHands();
+        
+        // Delay camera setup slightly to ensure scene is ready
+        setTimeout(() => {
+            this.setupCameraHandTracking();
+        }, 1000);
+        
         this.setupEventListeners();
         this.animate();
         
@@ -181,13 +186,18 @@ class HandTrackingVR {
 
     async setupCameraHandTracking() {
         try {
-            // Load MediaPipe Hands
-            const { Hands } = await import('https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js');
+            // Request camera permission explicitly
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'user', width: 640, height: 480 }
+            });
             
             // Create video element for camera input
             this.videoElement = document.createElement('video');
+            this.videoElement.srcObject = stream;
+            this.videoElement.playsInline = true;
             this.videoElement.style.display = 'none';
             document.body.appendChild(this.videoElement);
+            await this.videoElement.play();
 
             // Create canvas for hand detection
             this.canvasElement = document.createElement('canvas');
@@ -195,6 +205,13 @@ class HandTrackingVR {
             document.body.appendChild(this.canvasElement);
             this.ctx = this.canvasElement.getContext('2d');
 
+            // Set canvas dimensions
+            this.canvasElement.width = 640;
+            this.canvasElement.height = 480;
+
+            // Load MediaPipe Hands
+            const { Hands } = await import('https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js');
+            
             // Initialize MediaPipe Hands
             this.cameraHands = new Hands({
                 locateFile: (file) => {
@@ -213,23 +230,31 @@ class HandTrackingVR {
                 this.onCameraHandResults(results);
             });
 
-            // Setup camera
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'user' }
-            });
-            this.videoElement.srcObject = stream;
-            this.videoElement.play();
-
             // Create camera hand meshes
             this.createCameraHandMeshes();
 
-            // Start processing
-            await this.cameraHands.send({ image: this.videoElement });
+            // Start continuous processing
+            const processFrame = async () => {
+                if (this.videoElement && this.cameraHands) {
+                    await this.cameraHands.send({ image: this.videoElement });
+                }
+                requestAnimationFrame(processFrame);
+            };
             
-            console.log('Camera hand tracking initialized');
+            processFrame();
+            
+            console.log('Camera hand tracking initialized successfully');
         } catch (error) {
-            console.warn('Camera hand tracking not available:', error);
-            // VR hands will still work
+            console.error('Camera hand tracking failed:', error);
+            // Show user-friendly message
+            const loading = document.getElementById('loading');
+            loading.innerHTML = `
+                <div class="loader">
+                    <div class="hand-loader"></div>
+                    <p>Camera access required for hand tracking</p>
+                    <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #667eea; border: none; border-radius: 8px; color: white; cursor: pointer;">Grant Camera Access</button>
+                </div>
+            `;
         }
     }
 

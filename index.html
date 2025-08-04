@@ -14,6 +14,12 @@
         </div>
     </div>
 
+    <div id="permission-prompt" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); padding: 30px; border-radius: 15px; text-align: center; z-index: 2000;">
+        <h3>Camera Access Required</h3>
+        <p>To enable hand tracking, please allow camera access when prompted.</p>
+        <button onclick="app.setupCameraHandTracking()" style="margin-top: 15px; padding: 10px 20px; background: linear-gradient(135deg, #667eea, #764ba2); border: none; border-radius: 8px; color: white; cursor: pointer;">Enable Camera</button>
+    </div>
+
     <div id="ui-overlay">
         <div class="header">
             <h1>Android VR Hand Tracking</h1>
@@ -75,4 +81,3 @@
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"4c6229722a6346bc8eb5cb0e5eae5d41","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>
-
